@@ -2,8 +2,7 @@
 
 ```bash
 git clone https://github.com/step-app-fi/cosmos-init.git
-cd cosmos-init
-go install
+cd cosmos-init && go install ./...
 ```
 
 ```bash
