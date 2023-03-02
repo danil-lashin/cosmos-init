@@ -19,10 +19,14 @@ accounts:
     coins:
       - 100000000tenet
 validators:
-  - name: alice
+  - name: validator1
     bonded: 1000000tenet
     config:
       instrumentation:
         prometheus: true
-  - name: bob
+  - name: validator2
+    bonded: 1000000tenet
+  - name: validator3
+    bonded: 1000000tenet
+  - name: validator4
     bonded: 1000000tenet

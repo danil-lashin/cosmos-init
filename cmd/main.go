@@ -48,8 +48,7 @@ func main() {
 		}
 
 		{
-			keyname := "validator" + strconv.Itoa(i)
-			address := addKey(dir, keyname)
+			address := addKey(dir, val.Name)
 
 			if i != 0 {
 				cmd := exec.Command(BinaryName, "add-genesis-account", address, val.Bonded, "--home", HomeDir+"/0")
@@ -65,7 +64,7 @@ func main() {
 				}
 			}
 
-			cmd := exec.Command(BinaryName, "gentx", keyname, val.Bonded, "--home", HomeDir+"/"+strconv.Itoa(i), "--keyring-backend", KeyringBackend, "--chain-id", config.Genesis["chain_id"].(string))
+			cmd := exec.Command(BinaryName, "gentx", val.Name, val.Bonded, "--home", HomeDir+"/"+strconv.Itoa(i), "--keyring-backend", KeyringBackend, "--chain-id", config.Genesis["chain_id"].(string))
 			stdin, err := cmd.StdinPipe()
 			if err != nil {
 				panic(err)
