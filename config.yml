@@ -16,9 +16,13 @@ genesis:
             amount: "1000000000000000000"
 accounts:
   - name: myacc
-    balance: 100000000tenet
+    coins:
+      - 100000000tenet
 validators:
   - name: alice
     bonded: 1000000tenet
+    config:
+      instrumentation:
+        prometheus: true
   - name: bob
     bonded: 1000000tenet
