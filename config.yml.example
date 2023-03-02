@@ -1,3 +1,10 @@
+binary: "evmosd"
+home_dir: "./chain_data"
+keyring_backend: "file"
+passphrase: "1234567890"
+seed:
+  name: "seed"
+  addr: "seed:26656"
 genesis:
   chain_id: "step_108101-1"
   app_state:
@@ -10,6 +17,8 @@ genesis:
       constant_fee:
         denom: "tenet"
     gov:
+      voting_params:
+        voting_period: "600s"
       deposit_params:
         min_deposit:
           - denom: "tenet"
