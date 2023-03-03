@@ -26,6 +26,18 @@ func (c *Config) Decode(r io.Reader) error {
 	return yaml.NewDecoder(r).Decode(c)
 }
 
+func (c *Config) ChainID() string {
+	return c.Genesis["chain_id"].(string)
+}
+
+func (c *Config) ValDir(val Validator) string {
+	return c.HomeDir + "/" + val.Name
+}
+
+func (c *Config) FirstValDir() string {
+	return c.ValDir(c.Validators[0])
+}
+
 // Account holds the options related to setting up Cosmos wallets.
 type Account struct {
 	Name     string   `yaml:"name"`

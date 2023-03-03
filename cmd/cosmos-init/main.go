@@ -8,7 +8,6 @@ import (
 	"github.com/imdario/mergo"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -29,7 +28,7 @@ func main() {
 
 	// init validators
 	for i, val := range cfg.Validators {
-		dir := cfg.HomeDir + "/" + strconv.Itoa(i)
+		dir := cfg.ValDir(val)
 		mustExec("%s init %s --home %s --chain-id %s", cfg.Binary, val.Name, dir, cfg.Genesis["chain_id"].(string))
 
 		// rewrite val's config.toml from config
@@ -51,59 +50,57 @@ func main() {
 		// 2. add funds to genesis account
 		// 3. create gentx
 		// 4. move gentx to first val folder
-		{
-			address := addKey(dir, val.Name, cfg)
 
-			if i != 0 {
-				mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, cfg.HomeDir+"/0")
-			}
+		address := addKey(dir, val.Name, cfg)
 
-			mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, dir)
-
-			params := []string{"gentx", val.Name, val.Bonded,
-				"--home", dir,
-				"--keyring-backend", cfg.KeyringBackend,
-				"--chain-id", cfg.Genesis["chain_id"].(string)}
-
-			if val.Gentx != nil {
-				params = append(params, val.Gentx.ToParams()...)
-			}
-
-			mustExecWithPassphrase(cfg.Passphrase, "%s %s", cfg.Binary, strings.Join(params, " "))
+		if i != 0 {
+			mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, cfg.FirstValDir())
 		}
 
-		mustExec("mv %s/config/gentx/*.json %s/0/config/gentx/validator%d.json", dir, cfg.HomeDir, i)
+		mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, dir)
+
+		params := []string{"gentx", val.Name, val.Bonded,
+			"--home", dir,
+			"--keyring-backend", cfg.KeyringBackend,
+			"--chain-id", cfg.Genesis["chain_id"].(string)}
+
+		if val.Gentx != nil {
+			params = append(params, val.Gentx.ToParams()...)
+		}
+
+		mustExecWithPassphrase(cfg.Passphrase, "%s %s", cfg.Binary, strings.Join(params, " "))
+
+		mustExec("mv %s/config/gentx/*.json %s/config/gentx/validator%d.json", dir, cfg.FirstValDir(), i)
 	}
 
 	// rewrite genesis params from config
-	if err := UpdateJsonFile(cfg.HomeDir+"/0/config/genesis.json", cfg.Genesis); err != nil {
+	if err := UpdateJsonFile(cfg.FirstValDir()+"/config/genesis.json", cfg.Genesis); err != nil {
 		panic(err)
 	}
 
 	// create genesis accounts
 	for _, acc := range cfg.Accounts {
-		dir := cfg.HomeDir + "/0/"
-		address := addKey(dir, acc.Name, cfg)
+		address := addKey(cfg.FirstValDir(), acc.Name, cfg)
 
-		mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, strings.Join(acc.Coins, ","), dir)
+		mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, strings.Join(acc.Coins, ","), cfg.FirstValDir())
 	}
 
 	// collect gentxs
-	mustExec("%s collect-gentxs --keyring-backend %s --chain-id %s --home %s", cfg.Binary, cfg.KeyringBackend, cfg.Genesis["chain_id"].(string), cfg.HomeDir+"/0/")
+	mustExec("%s collect-gentxs --keyring-backend %s --chain-id %s --home %s", cfg.Binary, cfg.KeyringBackend, cfg.ChainID(), cfg.FirstValDir())
 
 	// populate genesis
-	for i := range cfg.Validators {
+	for i, val := range cfg.Validators {
 		if i == 0 {
 			continue
 		}
 
-		mustExec("cp %s/0/config/genesis.json %s/%d/config/genesis.json", cfg.HomeDir, cfg.HomeDir, i)
+		mustExec("cp %s/config/genesis.json %s/config/genesis.json", cfg.FirstValDir(), cfg.ValDir(val))
 	}
 
 	// create seed node
 	nodeId := createSeed(cfg)
-	for i := range cfg.Validators {
-		err := UpdateTomlFile(cfg.HomeDir+"/"+strconv.Itoa(i)+"/config/config.toml", map[string]interface{}{
+	for _, val := range cfg.Validators {
+		err := UpdateTomlFile(cfg.ValDir(val)+"/config/config.toml", map[string]interface{}{
 			"p2p": map[string]interface{}{
 				"persistent_peers": nodeId + "@" + cfg.Seed.Addr,
 			},
@@ -157,7 +154,7 @@ func mustExec(command string, args ...any) []byte {
 
 func createSeed(cfg *config.Config) string {
 	dir := cfg.HomeDir + "/seed"
-	mustExec("%s init seed --home %s --chain-id %s", cfg.Binary, dir, cfg.Genesis["chain_id"].(string))
+	mustExec("%s init seed --home %s --chain-id %s", cfg.Binary, dir, cfg.ChainID())
 
 	// rewrite val's configs from config
 	if err := UpdateTomlFile(dir+"/config/config.toml", cfg.Seed.Config); err != nil {
@@ -172,7 +169,7 @@ func createSeed(cfg *config.Config) string {
 		panic(err)
 	}
 
-	mustExec("cp -r %s/config/genesis.json %s/config/genesis.json", cfg.HomeDir+"/0", dir)
+	mustExec("cp -r %s/config/genesis.json %s/config/genesis.json", cfg.FirstValDir(), dir)
 
 	return strings.Trim(string(mustExec("%s tendermint show-node-id --home %s", cfg.Binary, dir)), "\n")
 }
