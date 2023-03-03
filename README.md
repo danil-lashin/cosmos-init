@@ -11,5 +11,5 @@ cp config.yml.example config.yml
 # edit config.yml
 nano config.yml
 # run cosmos-init
-cosmos-init
+cosmos-init [./config.toml]
 ```

@@ -6,17 +6,21 @@ import (
 	"fmt"
 	"github.com/ignite/cli/ignite/pkg/confile"
 	"github.com/imdario/mergo"
-	"io"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 )
 
-const ConfigFile = "config.yml"
+const DefaultConfigFile = "config.yml"
 
 func main() {
-	cfg := GetConfig(ConfigFile)
+	configFile := DefaultConfigFile
+	if len(os.Args) > 1 {
+		configFile = os.Args[1]
+	}
+
+	cfg := GetConfig(configFile)
 
 	os.RemoveAll(cfg.HomeDir)
 	if err := os.Mkdir(cfg.HomeDir, os.ModePerm); err != nil {
@@ -26,10 +30,7 @@ func main() {
 	// init validators
 	for i, val := range cfg.Validators {
 		dir := cfg.HomeDir + "/" + strconv.Itoa(i)
-		cmd := exec.Command(cfg.Binary, "init", val.Name, "--home", dir, "--chain-id", cfg.Genesis["chain_id"].(string))
-		if err := cmd.Run(); err != nil {
-			panic(err)
-		}
+		mustExec("%s init %s --home %s --chain-id %s", cfg.Binary, val.Name, dir, cfg.Genesis["chain_id"].(string))
 
 		// rewrite val's config.toml from config
 		if err := UpdateTomlFile(dir+"/config/config.toml", val.Config); err != nil {
@@ -54,18 +55,10 @@ func main() {
 			address := addKey(dir, val.Name, cfg)
 
 			if i != 0 {
-				cmd := exec.Command(cfg.Binary, "add-genesis-account", address, val.Bonded, "--home", cfg.HomeDir+"/0")
-				if err := cmd.Run(); err != nil {
-					panic(err)
-				}
+				mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, cfg.HomeDir+"/0")
 			}
 
-			{
-				cmd := exec.Command(cfg.Binary, "add-genesis-account", address, val.Bonded, "--home", dir)
-				if err := cmd.Run(); err != nil {
-					panic(err)
-				}
-			}
+			mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, val.Bonded, dir)
 
 			params := []string{"gentx", val.Name, val.Bonded,
 				"--home", dir,
@@ -73,24 +66,10 @@ func main() {
 				"--chain-id", cfg.Genesis["chain_id"].(string)}
 
 			if val.Gentx != nil {
-				params = append(params, val.Gentx.Fields()...)
+				params = append(params, val.Gentx.ToParams()...)
 			}
 
-			cmd := exec.Command(cfg.Binary, params...)
-			stdin, err := cmd.StdinPipe()
-			if err != nil {
-				panic(err)
-			}
-
-			if err := cmd.Start(); err != nil {
-				panic(err)
-			}
-
-			enterPassphrase(stdin, cfg)
-
-			if err := cmd.Wait(); err != nil {
-				panic(err)
-			}
+			mustExecWithPassphrase(cfg.Passphrase, "%s %s", cfg.Binary, strings.Join(params, " "))
 		}
 
 		mustExec("mv %s/config/gentx/*.json %s/0/config/gentx/validator%d.json", dir, cfg.HomeDir, i)
@@ -106,10 +85,7 @@ func main() {
 		dir := cfg.HomeDir + "/0/"
 		address := addKey(dir, acc.Name, cfg)
 
-		cmd := exec.Command(cfg.Binary, "add-genesis-account", address, strings.Join(acc.Coins, ","), "--home", dir)
-		if err := cmd.Run(); err != nil {
-			panic(err)
-		}
+		mustExec("%s add-genesis-account %s %s --home %s", cfg.Binary, address, strings.Join(acc.Coins, ","), dir)
 	}
 
 	// collect gentxs
@@ -138,6 +114,38 @@ func main() {
 	}
 }
 
+func mustExecWithPassphrase(passphrase string, command string, args ...any) []byte {
+	cmd := exec.Command("bash", "-c", fmt.Sprintf(command, args...))
+
+	output := bytes.NewBuffer(nil)
+	cmd.Stdout = output
+	cmd.Stderr = output
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		panic(err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		panic(err)
+	}
+
+	if _, err := stdin.Write([]byte(passphrase + "\n")); err != nil {
+		panic(err)
+	}
+
+	if _, err := stdin.Write([]byte(passphrase + "\n")); err != nil {
+		panic(err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		println(output.String())
+		panic(err)
+	}
+
+	return output.Bytes()
+}
+
 func mustExec(command string, args ...any) []byte {
 	output, err := exec.Command("bash", "-c", fmt.Sprintf(command, args...)).CombinedOutput()
 	if err != nil {
@@ -147,29 +155,26 @@ func mustExec(command string, args ...any) []byte {
 	return output
 }
 
-func createSeed(config *config.Config) string {
-	dir := config.HomeDir + "/seed"
-	cmd := exec.Command(config.Binary, "init", "seed", "--home", dir, "--chain-id", config.Genesis["chain_id"].(string))
-	if err := cmd.Run(); err != nil {
-		panic(err)
-	}
+func createSeed(cfg *config.Config) string {
+	dir := cfg.HomeDir + "/seed"
+	mustExec("%s init seed --home %s --chain-id %s", cfg.Binary, dir, cfg.Genesis["chain_id"].(string))
 
 	// rewrite val's configs from config
-	if err := UpdateTomlFile(dir+"/config/config.toml", config.Seed.Config); err != nil {
+	if err := UpdateTomlFile(dir+"/config/config.toml", cfg.Seed.Config); err != nil {
 		panic(err)
 	}
 
-	if err := UpdateTomlFile(dir+"/config/app.toml", config.Seed.App); err != nil {
+	if err := UpdateTomlFile(dir+"/config/app.toml", cfg.Seed.App); err != nil {
 		panic(err)
 	}
 
-	if err := UpdateTomlFile(dir+"/config/client.toml", config.Seed.Client); err != nil {
+	if err := UpdateTomlFile(dir+"/config/client.toml", cfg.Seed.Client); err != nil {
 		panic(err)
 	}
 
-	mustExec("cp -r %s/config/genesis.json %s/config/genesis.json", config.HomeDir+"/0", dir)
+	mustExec("cp -r %s/config/genesis.json %s/config/genesis.json", cfg.HomeDir+"/0", dir)
 
-	return strings.Trim(string(mustExec("%s tendermint show-node-id --home %s", config.Binary, dir)), "\n")
+	return strings.Trim(string(mustExec("%s tendermint show-node-id --home %s", cfg.Binary, dir)), "\n")
 }
 
 func GetConfig(file string) *config.Config {
@@ -187,36 +192,10 @@ func GetConfig(file string) *config.Config {
 	return cfg
 }
 
-func addKey(dir, keyname string, config *config.Config) string {
-	cmd := exec.Command(config.Binary, "keys", "add", keyname, "--home", dir, "--keyring-backend", config.KeyringBackend, "--algo", "eth_secp256k1")
-	result := bytes.NewBuffer(nil)
-	cmd.Stdout = result
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		panic(err)
-	}
+func addKey(dir, keyname string, cfg *config.Config) string {
+	result := mustExecWithPassphrase(cfg.Passphrase, "%s keys add %s --home %s --keyring-backend %s --algo eth_secp256k1", cfg.Binary, keyname, dir, cfg.KeyringBackend)
 
-	if err := cmd.Start(); err != nil {
-		panic(err)
-	}
-
-	enterPassphrase(stdin, config)
-
-	if err := cmd.Wait(); err != nil {
-		panic(err)
-	}
-
-	return strings.Trim(strings.Split(strings.Split(result.String(), "\n")[0], ":")[1], " ")
-}
-
-func enterPassphrase(stdin io.WriteCloser, config *config.Config) {
-	if _, err := stdin.Write([]byte(config.Passphrase + "\n")); err != nil {
-		panic(err)
-	}
-
-	if _, err := stdin.Write([]byte(config.Passphrase + "\n")); err != nil {
-		panic(err)
-	}
+	return strings.Trim(strings.Split(strings.Split(string(result), "\n")[1], ":")[1], " ")
 }
 
 func UpdateJsonFile(path string, data map[string]interface{}) error {

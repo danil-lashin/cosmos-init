@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	xyaml "github.com/ignite/cli/ignite/pkg/yaml"
 	"gopkg.in/yaml.v2"
 	"io"
@@ -182,7 +183,7 @@ type Gentx struct {
 	TimeoutHeight uint `yaml:"timeout-height"`
 }
 
-func (b Gentx) Fields() []string {
+func (b Gentx) ToParams() []string {
 	var res []string
 	val := reflect.ValueOf(b)
 	for i := 0; i < val.Type().NumField(); i++ {
@@ -196,7 +197,7 @@ func (b Gentx) Fields() []string {
 			}
 		case reflect.String:
 			if !val.Field(i).IsZero() {
-				res = append(res, "--"+name, val.Field(i).String())
+				res = append(res, "--"+name, fmt.Sprintf("\"%s\"", val.Field(i).String()))
 			}
 		case reflect.Bool:
 			if val.Field(i).Bool() {
