@@ -16,52 +16,67 @@ import (
 const ConfigFile = "config.yml"
 
 func main() {
-	config := GetConfig(ConfigFile)
+	cfg := GetConfig(ConfigFile)
 
-	os.RemoveAll(config.HomeDir)
-	if err := os.Mkdir(config.HomeDir, os.ModePerm); err != nil {
+	os.RemoveAll(cfg.HomeDir)
+	if err := os.Mkdir(cfg.HomeDir, os.ModePerm); err != nil {
 		panic(err)
 	}
 
 	// init validators
-	for i, val := range config.Validators {
-		dir := config.HomeDir + "/" + strconv.Itoa(i)
-		cmd := exec.Command(config.Binary, "init", val.Name, "--home", dir, "--chain-id", config.Genesis["chain_id"].(string))
+	for i, val := range cfg.Validators {
+		dir := cfg.HomeDir + "/" + strconv.Itoa(i)
+		cmd := exec.Command(cfg.Binary, "init", val.Name, "--home", dir, "--chain-id", cfg.Genesis["chain_id"].(string))
 		if err := cmd.Run(); err != nil {
 			panic(err)
 		}
 
-		// rewrite val's configs from config
+		// rewrite val's config.toml from config
 		if err := UpdateTomlFile(dir+"/config/config.toml", val.Config); err != nil {
 			panic(err)
 		}
 
+		// rewrite val's app.toml from config
 		if err := UpdateTomlFile(dir+"/config/app.toml", val.App); err != nil {
 			panic(err)
 		}
 
+		// rewrite val's client.toml from config
 		if err := UpdateTomlFile(dir+"/config/client.toml", val.Client); err != nil {
 			panic(err)
 		}
 
+		// 1. generate address (key) for validator
+		// 2. add funds to genesis account
+		// 3. create gentx
+		// 4. move gentx to first val folder
 		{
-			address := addKey(dir, val.Name, config)
+			address := addKey(dir, val.Name, cfg)
 
 			if i != 0 {
-				cmd := exec.Command(config.Binary, "add-genesis-account", address, val.Bonded, "--home", config.HomeDir+"/0")
+				cmd := exec.Command(cfg.Binary, "add-genesis-account", address, val.Bonded, "--home", cfg.HomeDir+"/0")
 				if err := cmd.Run(); err != nil {
 					panic(err)
 				}
 			}
 
 			{
-				cmd := exec.Command(config.Binary, "add-genesis-account", address, val.Bonded, "--home", dir)
+				cmd := exec.Command(cfg.Binary, "add-genesis-account", address, val.Bonded, "--home", dir)
 				if err := cmd.Run(); err != nil {
 					panic(err)
 				}
 			}
 
-			cmd := exec.Command(config.Binary, "gentx", val.Name, val.Bonded, "--home", config.HomeDir+"/"+strconv.Itoa(i), "--keyring-backend", config.KeyringBackend, "--chain-id", config.Genesis["chain_id"].(string))
+			params := []string{"gentx", val.Name, val.Bonded,
+				"--home", dir,
+				"--keyring-backend", cfg.KeyringBackend,
+				"--chain-id", cfg.Genesis["chain_id"].(string)}
+
+			if val.Gentx != nil {
+				params = append(params, val.Gentx.Fields()...)
+			}
+
+			cmd := exec.Command(cfg.Binary, params...)
 			stdin, err := cmd.StdinPipe()
 			if err != nil {
 				panic(err)
@@ -71,64 +86,50 @@ func main() {
 				panic(err)
 			}
 
-			enterPassphrase(stdin, config)
+			enterPassphrase(stdin, cfg)
 
 			if err := cmd.Wait(); err != nil {
 				panic(err)
 			}
 		}
 
-		{
-			entries, err := os.ReadDir(dir + "/config/gentx/")
-			if err != nil {
-				panic(err)
-			}
-
-			if err := exec.Command("mv", dir+"/config/gentx/"+
-				entries[0].Name(), config.HomeDir+"/0/config/gentx/validator"+strconv.Itoa(i)+".json").Run(); err != nil {
-				panic(err)
-			}
-		}
+		mustExec("mv %s/config/gentx/*.json %s/0/config/gentx/validator%d.json", dir, cfg.HomeDir, i)
 	}
 
 	// rewrite genesis params from config
-	if err := UpdateJsonFile(config.HomeDir+"/0/config/genesis.json", config.Genesis); err != nil {
+	if err := UpdateJsonFile(cfg.HomeDir+"/0/config/genesis.json", cfg.Genesis); err != nil {
 		panic(err)
 	}
 
 	// create genesis accounts
-	for _, acc := range config.Accounts {
-		dir := config.HomeDir + "/0/"
-		address := addKey(dir, acc.Name, config)
+	for _, acc := range cfg.Accounts {
+		dir := cfg.HomeDir + "/0/"
+		address := addKey(dir, acc.Name, cfg)
 
-		cmd := exec.Command(config.Binary, "add-genesis-account", address, strings.Join(acc.Coins, ","), "--home", dir)
+		cmd := exec.Command(cfg.Binary, "add-genesis-account", address, strings.Join(acc.Coins, ","), "--home", dir)
 		if err := cmd.Run(); err != nil {
 			panic(err)
 		}
 	}
 
-	if output, err := exec.Command(config.Binary, "collect-gentxs", "--keyring-backend", config.KeyringBackend, "--chain-id", config.Genesis["chain_id"].(string), "--home", config.HomeDir+"/0/").CombinedOutput(); err != nil {
-		println(string(output))
-		panic(err)
-	}
+	// collect gentxs
+	mustExec("%s collect-gentxs --keyring-backend %s --chain-id %s --home %s", cfg.Binary, cfg.KeyringBackend, cfg.Genesis["chain_id"].(string), cfg.HomeDir+"/0/")
 
 	// populate genesis
-	for i := range config.Validators {
+	for i := range cfg.Validators {
 		if i == 0 {
 			continue
 		}
 
-		if err := exec.Command("cp", config.HomeDir+"/0/config/genesis.json", config.HomeDir+"/"+strconv.Itoa(i)+"/config/genesis.json").Run(); err != nil {
-			panic(err)
-		}
+		mustExec("cp %s/0/config/genesis.json %s/%d/config/genesis.json", cfg.HomeDir, cfg.HomeDir, i)
 	}
 
-	nodeId := createSeed(config)
-
-	for i := range config.Validators {
-		err := UpdateTomlFile(config.HomeDir+"/"+strconv.Itoa(i)+"/config/config.toml", map[string]interface{}{
+	// create seed node
+	nodeId := createSeed(cfg)
+	for i := range cfg.Validators {
+		err := UpdateTomlFile(cfg.HomeDir+"/"+strconv.Itoa(i)+"/config/config.toml", map[string]interface{}{
 			"p2p": map[string]interface{}{
-				"persistent_peers": nodeId + "@" + config.Seed.Addr,
+				"persistent_peers": nodeId + "@" + cfg.Seed.Addr,
 			},
 		})
 		if err != nil {
@@ -172,18 +173,18 @@ func createSeed(config *config.Config) string {
 }
 
 func GetConfig(file string) *config.Config {
-	config := &config.Config{}
+	cfg := &config.Config{}
 
 	f, err := os.Open(file)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := config.Decode(f); err != nil {
+	if err := cfg.Decode(f); err != nil {
 		panic(err)
 	}
 
-	return config
+	return cfg
 }
 
 func addKey(dir, keyname string, config *config.Config) string {
