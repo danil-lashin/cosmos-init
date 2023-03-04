@@ -19,6 +19,7 @@ type Config struct {
 	Accounts       []Account   `yaml:"accounts"`
 	Genesis        xyaml.Map   `yaml:"genesis,omitempty"`
 	Validators     []Validator `yaml:"validators"`
+	KeyAlgo        string      `yaml:"key_algo"`
 }
 
 // Decode decodes the config file values from YAML.

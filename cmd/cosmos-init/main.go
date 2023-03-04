@@ -86,7 +86,7 @@ func main() {
 	}
 
 	// collect gentxs
-	mustExec("%s collect-gentxs --keyring-backend %s --chain-id %s --home %s", cfg.Binary, cfg.KeyringBackend, cfg.ChainID(), cfg.FirstValDir())
+	mustExec("%s collect-gentxs --home %s", cfg.Binary, cfg.FirstValDir())
 
 	// populate genesis
 	for i, val := range cfg.Validators {
@@ -146,6 +146,7 @@ func mustExecWithPassphrase(passphrase string, command string, args ...any) []by
 func mustExec(command string, args ...any) []byte {
 	output, err := exec.Command("bash", "-c", fmt.Sprintf(command, args...)).CombinedOutput()
 	if err != nil {
+		println(string(output))
 		panic(err)
 	}
 
@@ -190,7 +191,12 @@ func GetConfig(file string) *config.Config {
 }
 
 func addKey(dir, keyname string, cfg *config.Config) string {
-	result := mustExecWithPassphrase(cfg.Passphrase, "%s keys add %s --home %s --keyring-backend %s --algo eth_secp256k1", cfg.Binary, keyname, dir, cfg.KeyringBackend)
+	algo := ""
+	if cfg.KeyAlgo != "" {
+		algo = "--algo " + cfg.KeyAlgo
+	}
+
+	result := mustExecWithPassphrase(cfg.Passphrase, "%s keys add %s --home %s --keyring-backend %s %s", cfg.Binary, keyname, dir, cfg.KeyringBackend, algo)
 
 	return strings.Trim(strings.Split(strings.Split(string(result), "\n")[1], ":")[1], " ")
 }

@@ -2,6 +2,7 @@ binary: "evmosd"
 home_dir: "./chain_data"
 keyring_backend: "file"
 passphrase: "1234567890"
+key_algo: "eth_secp256k1"
 seed:
   name: "seed"
   addr: "seed:26656"
