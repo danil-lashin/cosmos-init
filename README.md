@@ -1,8 +1,7 @@
 # Cosmos Init
 
 ```bash
-git clone https://github.com/step-app-fi/cosmos-init.git
-cd cosmos-init && go install ./...
+go install github.com/tenet-org/cosmos-init
 ```
 
 ```bash
@@ -11,5 +10,5 @@ cp config.yml.example config.yml
 # edit config.yml
 nano config.yml
 # run cosmos-init
-cosmos-init [./config.toml]
+PASSPHRASE=1234567890 cosmos-init [./config.toml]
 ```

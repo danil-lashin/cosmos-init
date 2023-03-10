@@ -5,6 +5,7 @@ import (
 	xyaml "github.com/ignite/cli/ignite/pkg/yaml"
 	"gopkg.in/yaml.v2"
 	"io"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -24,7 +25,13 @@ type Config struct {
 
 // Decode decodes the config file values from YAML.
 func (c *Config) Decode(r io.Reader) error {
-	return yaml.NewDecoder(r).Decode(c)
+	if err := yaml.NewDecoder(r).Decode(c); err != nil {
+		return err
+	}
+
+	c.Passphrase = os.Getenv("PASSPHRASE")
+
+	return nil
 }
 
 func (c *Config) ChainID() string {

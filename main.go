@@ -2,10 +2,10 @@ package main
 
 import (
 	"bytes"
-	"cosmos-init/config"
 	"fmt"
 	"github.com/ignite/cli/ignite/pkg/confile"
 	"github.com/imdario/mergo"
+	"github.com/tenet-org/cosmos-init/config"
 	"os"
 	"os/exec"
 	"strings"

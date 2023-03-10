@@ -1,42 +1,41 @@
-binary: "evmosd"
+binary: tenetd
 home_dir: "./chain_data"
-keyring_backend: "file"
-passphrase: "1234567890"
-key_algo: "eth_secp256k1"
+keyring_backend: file
+key_algo: eth_secp256k1
 seed:
-  name: "seed"
+  name: seed
   addr: "seed:26656"
 genesis:
   chain_id: "step_108101-1"
   app_state:
     staking:
       params:
-        bond_denom: "tenet"
-        unbonding_time: "1296000s"
+        bond_denom: atenet
+        unbonding_time: 1296000s
         max_validators: 64
     crisis:
       constant_fee:
-        denom: "tenet"
+        denom: atenet
     gov:
       voting_params:
-        voting_period: "600s"
+        voting_period: 600s
       deposit_params:
         min_deposit:
-          - denom: "tenet"
-            amount: "1000000000000000000"
+          - denom: atenet
+            amount: 1000000000000000000
 accounts:
   - name: myacc
     coins:
-      - 100000000tenet
+      - 100000000000000000000atenet
 validators:
   - name: validator1
-    bonded: 1000000tenet
+    bonded: 1000000000000000000atenet
     config:
       instrumentation:
         prometheus: true
   - name: validator2
-    bonded: 1000000tenet
+    bonded: 1000000000000000000atenet
   - name: validator3
-    bonded: 1000000tenet
+    bonded: 1000000000000000000atenet
   - name: validator4
-    bonded: 1000000tenet
+    bonded: 1000000000000000000atenet
