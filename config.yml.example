@@ -6,7 +6,7 @@ seed:
   name: seed
   addr: "seed:26656"
 genesis:
-  chain_id: "step_108101-1"
+  chain_id: "tenet_108101-1"
   app_state:
     staking:
       params:
