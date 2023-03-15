@@ -22,7 +22,7 @@ genesis:
       deposit_params:
         min_deposit:
           - denom: atenet
-            amount: 1000000000000000000
+            amount: "1000000000000000000"
 accounts:
   - name: myacc
     coins:
