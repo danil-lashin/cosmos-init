@@ -1,7 +1,7 @@
 # Cosmos Init
 
 ```bash
-go install github.com/tenet-org/cosmos-init
+go install github.com/danil-lashin/cosmos-init
 ```
 
 ```bash
